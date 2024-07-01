@@ -1,16 +1,12 @@
 package com.phatpl.learnvocabulary.models;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.*;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-import org.springframework.data.jpa.repository.EntityGraph;
 
-import java.sql.Timestamp;
 import java.util.List;
 
 @Getter
@@ -24,21 +20,9 @@ import java.util.List;
 public class Group extends BaseModel {
     String name;
 
-    @CreationTimestamp
-    Timestamp createdAt;
-
-    @UpdateTimestamp
-    Timestamp updatedAt;
-
     @Builder.Default
     Boolean isPrivate = true;
 
-//    @OneToMany(mappedBy = "group")
-//    @JsonProperty("group_detail")
-//    @JsonIgnoreProperties("group")
-//    List<GroupWord> wordGroups;
-
-    @OneToMany
-    @JsonIgnore
-    List<UserGroup> userGroups;
+    @OneToMany(mappedBy = "group", fetch = FetchType.LAZY)
+    List<GroupWord> groupWords;
 }

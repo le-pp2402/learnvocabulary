@@ -8,7 +8,6 @@ import com.phatpl.learnvocabulary.utils.BuildResponse;
 import jakarta.persistence.MappedSuperclass;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
@@ -25,7 +24,7 @@ public class BaseController<E extends BaseModel, DTO extends BaseDTO, FT extends
 
     @GetMapping("/{id}")
     public ResponseEntity findById(@PathVariable("id") Integer id) {
-        DTO response = service.findById(id);
+        DTO response = service.findDTOById(id);
         if (response != null) {
             return BuildResponse.ok(response);
         }
@@ -33,9 +32,8 @@ public class BaseController<E extends BaseModel, DTO extends BaseDTO, FT extends
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SCOPE_ADMIN')")
     public ResponseEntity findAll() {
-        List<DTO> lst = service.findAll();
+        List<DTO> lst = service.findAllDTO();
         return BuildResponse.ok(lst);
     }
 

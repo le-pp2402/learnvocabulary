@@ -32,12 +32,12 @@ public class AuthService extends BaseService<User, UserResponse, UserFilter, Int
         this.authenticationManager = authenticationManager;
     }
 
-
+    
     public LoginResponse login(LoginRequest request) {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
         );
-        var user = userRepository.findByUsername(request.getUsername()).orElseThrow(() -> new InactiveAccountException());
+        var user = userRepository.findByUsername(request.getUsername()).orElseThrow(InactiveAccountException::new);
         if (!user.getActivated()) throw new InactiveAccountException();
 
         String token = jwtService.createToken(userResponseMapper.toDTO(user));

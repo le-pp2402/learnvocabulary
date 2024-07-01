@@ -1,4 +1,4 @@
-package com.phatpl.learnvocabulary.dtos.request;
+package com.phatpl.learnvocabulary.utils.DefineDatatype;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginRequest {
-    private String username;
-    private String password;
+public class Pair<F, S> {
+    F first;
+    S second;
 }

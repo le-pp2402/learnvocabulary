@@ -1,93 +1,126 @@
 package com.phatpl.learnvocabulary.controllers;
 
-
 import com.phatpl.learnvocabulary.dtos.request.CreateGroupRequest;
 import com.phatpl.learnvocabulary.dtos.request.UpdateGroupRequest;
 import com.phatpl.learnvocabulary.dtos.response.GroupResponse;
+import com.phatpl.learnvocabulary.exceptions.UnauthorizationException;
 import com.phatpl.learnvocabulary.filters.GroupFilter;
-import com.phatpl.learnvocabulary.mappers.GroupRequestMapper;
-import com.phatpl.learnvocabulary.mappers.UserGroupResponseMapper;
 import com.phatpl.learnvocabulary.models.Group;
-import com.phatpl.learnvocabulary.models.User;
-import com.phatpl.learnvocabulary.models.UserGroup;
-import com.phatpl.learnvocabulary.repositories.GroupRepository;
-import com.phatpl.learnvocabulary.repositories.UserGroupRepository;
-import com.phatpl.learnvocabulary.repositories.UserRepository;
 import com.phatpl.learnvocabulary.services.GroupService;
-import com.phatpl.learnvocabulary.services.JWTService;
+import com.phatpl.learnvocabulary.services.GroupWordService;
+import com.phatpl.learnvocabulary.services.UserGroupService;
 import com.phatpl.learnvocabulary.utils.BuildResponse;
-import com.phatpl.learnvocabulary.utils.Logger;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import lombok.AccessLevel;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 
-import java.text.ParseException;
-import java.util.Map;
-
+@Slf4j
 @RestController
-@RequestMapping("/groups")
+@RequestMapping(value = "/groups")
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class GroupController extends BaseController<Group, GroupResponse, GroupFilter, Integer> {
-
-    private final GroupRepository groupRepository;
-    private final GroupService groupService;
-    private final UserRepository userRepository;
-    private final UserGroupRepository userGroupRepository;
-    private final JWTService jwtService;
+    GroupService groupService;
+    UserGroupService userGroupService;
+    GroupWordService groupWordService;
 
     @Autowired
-    public GroupController(GroupRepository groupRepository, GroupService groupService, UserRepository userRepository, UserGroupRepository userGroupRepository, JWTService jwtService) {
+    public GroupController(GroupService groupService, UserGroupService userGroupService, GroupWordService groupWordService) {
         super(groupService);
-        this.groupRepository = groupRepository;
         this.groupService = groupService;
-        this.userRepository = userRepository;
-        this.userGroupRepository = userGroupRepository;
-        this.jwtService = jwtService;
+        this.userGroupService = userGroupService;
+        this.groupWordService = groupWordService;
     }
 
     @PostMapping("/me")
-    public ResponseEntity createGroup(HttpServletRequest request, @RequestBody @Valid CreateGroupRequest createGroupRequest, BindingResult bindingResult) {
+    public ResponseEntity createGroup(@RequestBody @Valid CreateGroupRequest createGroupRequest, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
-            Logger.error("loi");
-            return ResponseEntity
-                    .status(HttpStatus.NOT_ACCEPTABLE.value())
-                    .body(bindingResult.getFieldErrors().get(0).getDefaultMessage());
+            var error = bindingResult.getFieldErrors().get(0);
+            return BuildResponse.badRequest(error.getDefaultMessage());
         }
-        String token = request.getHeader("Authorization").substring(7);
         try {
-            var group = GroupRequestMapper.instance.toEntity(createGroupRequest);
-            jwtService.verifyToken(token);
-            Map<String, Object> obj = jwtService.getAllClaims(token).getClaims();
-            User user = userRepository.findById((Integer) obj.get("id")).get();
-            UserGroup userGroup = UserGroup.builder().group(group).user(user).build();
-            userGroup.setIsOwner(true);
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            return BuildResponse.created(userGroupService.create(createGroupRequest, auth));
+        } catch (RuntimeException e) {
+            return BuildResponse.badRequest(e.getMessage());
+        }
+    }
 
-            Integer groupId = groupRepository.save(group).getId();
-            userGroupRepository.save(userGroup);
-            return BuildResponse.ok(groupRepository.findById(groupId));
-        } catch (Exception e) {
-            return BuildResponse.ok(e.getMessage());
+    @GetMapping("/me")
+    public ResponseEntity findGroupByUser() {
+        try {
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            return BuildResponse.ok(groupService.findGroupByUser(auth));
+        } catch (RuntimeException e) {
+            return BuildResponse.badRequest(e.getMessage());
         }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity updateGroupInfo(@NotNull @PathVariable("id") Integer id, @RequestBody UpdateGroupRequest updateGroupRequest) {
-        // check authrization
-        Logger.log(updateGroupRequest.toString());
-        return BuildResponse.ok(groupService.updateGroupInfo(id, updateGroupRequest));
+    public ResponseEntity updateGroupInfo(@PathVariable("id") Integer groupId, @RequestBody UpdateGroupRequest updateGroupRequest) {
+        try {
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            return BuildResponse.ok(groupService.updateGroupInfo(groupId, updateGroupRequest, auth));
+        } catch (UnauthorizationException e) {
+            return BuildResponse.unauthorized(e.getMessage());
+        } catch (RuntimeException e) {
+            return BuildResponse.badRequest(e.getMessage());
+        }
     }
 
-    @GetMapping("/me")
-    public ResponseEntity getGroupOfUser(HttpServletRequest request, GroupFilter groupFilter) throws ParseException {
-        // check authorization
-        String token = request.getHeader("Authorization").substring(7);
-        var body = jwtService.getAllClaims(token).getClaims();
-        Map<String, Object> obj = (Map<String, Object>) body.get("data");
-        User user = userRepository.findById((Integer) obj.get("id")).get();
-        return BuildResponse.ok(UserGroupResponseMapper.instance.toListDTO(user.getUserGroups()));
+
+    @Override
+    @GetMapping("/{id}")
+    public ResponseEntity findById(@PathVariable("id") Integer groupId) {
+        try {
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            return BuildResponse.ok(groupWordService.getWordsOfGroup(groupId, auth));
+        } catch (UnauthorizationException e) {
+            return BuildResponse.unauthorized(e.getMessage());
+        } catch (RuntimeException e) {
+            return BuildResponse.badRequest(e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity delete(@PathVariable("id") Integer groupId) {
+        try {
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            userGroupService.delete(groupId, auth);
+            return BuildResponse.ok("deleted group id = " + groupId);
+        } catch (Exception e) {
+            return BuildResponse.forbidden(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/follow")
+    public ResponseEntity followGroup(@NotNull @PathVariable("id") Integer groupId) {
+        try {
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            return BuildResponse.ok(userGroupService.follow(groupId, auth));
+        } catch (UnauthorizationException e) {
+            return BuildResponse.unauthorized(e.getMessage());
+        } catch (RuntimeException e) {
+            return BuildResponse.badRequest(e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/clone")
+    public ResponseEntity cloneGroup(@NotNull @PathVariable("id") Integer groupId) {
+        try {
+            JwtAuthenticationToken auth = (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
+            return BuildResponse.ok(groupWordService.clone(groupId, auth));
+        } catch (UnauthorizationException e) {
+            return BuildResponse.unauthorized(e.getMessage());
+        } catch (RuntimeException e) {
+            return BuildResponse.badRequest(e.getMessage());
+        }
     }
 }
